@@ -131,7 +131,11 @@ issue_pool_cert() {
             # file (agent_uuid = auto, uuid_file = mirror-agent.uuid) when it
             # doesn't have one of its own yet; it must match the cert's CN or
             # the receiver's mTLS check rejects the connection.
-            printf '%s\n' "$uuid" > "$STATE_DIR/$pool/${label}${idx}_${uuid}.uuid"
+            # No trailing newline: the agent's uuid_file reader (parse_uuid in
+            # src/common/config.c) rejects any non-hex, non-dash character,
+            # so a '\n' here would make it fall back to a random UUID that
+            # won't match the cert's CN.
+            printf '%s' "$uuid" > "$STATE_DIR/$pool/${label}${idx}_${uuid}.uuid"
             ;;
     esac
     printf '%s\t%s\tfree\t%s\n' "$idx" "$uuid" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \

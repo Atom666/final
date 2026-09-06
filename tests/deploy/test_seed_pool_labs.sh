@@ -51,6 +51,8 @@ assert_eq "slot 1 uuid file exists" "1" "$([ -f "$uuidfile" ] && echo 1 || echo 
 assert_eq "no bootstrap script for labs" "0" "$([ -f "$boot" ] && echo 1 || echo 0)"
 
 assert_eq "uuid file content matches the slot's uuid" "$uuid1" "$(cat "$uuidfile")"
+assert_eq "uuid file has no trailing newline (agent's parse_uuid rejects it)" \
+    "$(printf '%s' "$uuid1" | wc -c)" "$(wc -c < "$uuidfile" | tr -d ' ')"
 
 cert_subject=$(openssl x509 -in "$crt" -noout -subject)
 assert_eq "slot cert CN is the bare uuid" "subject=CN=$uuid1" "$cert_subject"

@@ -74,5 +74,10 @@ assert_eq "labs export includes the slot's key" "1" "$(printf '%s\n' "$listing" 
 assert_eq "labs export includes the slot's uuid file" "1" "$(printf '%s\n' "$listing" | grep -c '^machine1_.*\.uuid$')"
 assert_eq "labs export does not include an unrequested slot's files" "0" "$(printf '%s\n' "$listing" | grep -c 'machine2_')"
 
+run export_pool labs "1,2" "$TMP/labs-both.tar.gz"
+listing=$(tar -tzf "$TMP/labs-both.tar.gz" | sort)
+assert_eq "multi-slot labs export includes ca.crt exactly once" "1" "$(printf '%s\n' "$listing" | grep -c '^ca.crt$')"
+assert_eq "multi-slot labs export includes both slots' files (6 + 1 shared ca.crt)" "7" "$(printf '%s\n' "$listing" | wc -l | tr -d ' ')"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

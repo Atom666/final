@@ -298,6 +298,64 @@ Npcap не предоставляет аналоги Linux `TP_STATUS_CSUMNOTREA
 не нативной службой Windows. Её пока нельзя напрямую регистрировать через
 `sc.exe`.
 
+## Автоматический деплой (nad-provision.sh)
+
+Сначала соберите и установите бинарники на `nad` (`./scripts/build.sh
+--clean --install`), затем один раз:
+
+```sh
+# На nad (root):
+./scripts/nad-provision.sh init --nad-host 192.168.1.78
+```
+
+Команда генерирует CA и серверный сертификат (`CN`/`SAN` —
+`pt-nad-rt.edtechlab.local`), устанавливает `/etc/mirror-receiver/*` и
+включает `mirror-interface.service`/`mirror-receiver.service`. Повторный
+запуск с тем же `--nad-host` — no-op.
+
+Дальше один раз на весь пул нужных сертификатов (сейчас есть пул
+`students`; `labs` для Windows-машин лабораторий появится отдельно):
+
+```sh
+./scripts/nad-provision.sh seed --pool students --count 100
+```
+
+Это выпускает 100 постоянных сертификатов и по одному самодостаточному
+скрипту на слот в `/root/mirror-certs/students/student<N>_<uuid>.sh`
+(под `sudo` `$HOME` — это `/root`). Повторный запуск с тем же `--count` —
+no-op; с другим — ошибка (пул не растёт, см.
+`docs/superpowers/specs/2026-09-06-cert-pool-provisioning-design.md`).
+
+Скопируйте нужный `student<N>_<uuid>.sh` на целевую машину (LXD-контейнер
+студента) и запустите там от root:
+
+```sh
+sudo ./student7_<uuid>.sh
+```
+
+Сертификаты, `agent.conf` и `mirror-agent.service` настроятся
+автоматически; `capture_iface` определяется по интерфейсу маршрута по
+умолчанию (переопределяется через `--iface`). Скрипт содержит приватный
+ключ агента в открытом виде — удалите его после использования.
+
+Учёт того, какие слоты сейчас в деле:
+
+```sh
+./scripts/nad-provision.sh occupy  --pool students --slots 1-10
+./scripts/nad-provision.sh release --pool students --slots 7
+./scripts/nad-provision.sh status  --pool students
+```
+
+Экспорт пачки скриптов для переноса на другую машину (по умолчанию — весь
+пул; `occupy`/`release` не требуются и не меняются экспортом):
+
+```sh
+./scripts/nad-provision.sh export --pool students --out students.tar.gz
+```
+
+Ниже описан тот же процесс вручную — полезно для отладки или если нужно
+изменить шаг вручную.
+
 ## Полная установка на три VM
 
 Ниже приведён рабочий сценарий для стенда:

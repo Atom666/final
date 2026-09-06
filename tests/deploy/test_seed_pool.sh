@@ -27,10 +27,10 @@ run() {
       MIRROR_PROVISION_SCRIPT_DIR="$REPO_ROOT/scripts"
       . "$SCRIPT"
       STATE_DIR="$TMP/state"
-      NAD_HOST="192.168.1.78"
       "$@" )
 }
 
+printf '192.168.1.78\n' > "$STATE_DIR/nad-host"
 run ensure_ca >/dev/null
 
 out=$(run seed_pool students 3)

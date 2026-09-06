@@ -66,6 +66,10 @@ expand_slot_spec() {
                     echo "invalid slot range: $part" >&2
                     exit 2
                 }
+                [ "$lo" -le "$hi" ] || {
+                    echo "invalid slot range: $part" >&2
+                    exit 2
+                }
                 i=$lo
                 while [ "$i" -le "$hi" ]; do
                     echo "$i"
@@ -129,6 +133,8 @@ seed_pool() {
         echo "CA not found in $STATE_DIR; run '$0 init' first" >&2
         exit 1
     }
+    [ -f "$STATE_DIR/nad-host" ] || { echo "nad-host not recorded in $STATE_DIR; run '$0 init' first" >&2; exit 1; }
+    NAD_HOST=$(cat "$STATE_DIR/nad-host")
     pool_dir="$STATE_DIR/$pool"
     tsv="$pool_dir/$pool.tsv"
     mkdir -p "$pool_dir"
@@ -158,7 +164,8 @@ mark_slots() {
     require_status=$4
     tsv="$STATE_DIR/$pool/$pool.tsv"
     [ -f "$tsv" ] || { echo "Pool '$pool' has not been seeded (no $tsv)" >&2; exit 1; }
-    slots=$(expand_slot_spec "$spec" | tr '\n' ',')
+    slots=$(expand_slot_spec "$spec")
+    slots=$(printf '%s\n' "$slots" | tr '\n' ',')
     tmp="$tsv.tmp.$$"
     failflag="$tmp.fail"
     rm -f "$failflag"
@@ -176,7 +183,7 @@ mark_slots() {
                     $3 = target
                 } else {
                     print "FAIL - slot " $1 " is already " $3 > "/dev/stderr"
-                    system("touch " failflag)
+                    system("touch \"" failflag "\"")
                 }
             }
             print > tmpfile
@@ -184,12 +191,15 @@ mark_slots() {
         END {
             for (s in want) if (!(s in seen)) {
                 print "FAIL - slot " s " does not exist in pool" > "/dev/stderr"
-                system("touch " failflag)
+                system("touch \"" failflag "\"")
             }
         }
     ' "$tsv"
     mv "$tmp" "$tsv"
-    [ ! -f "$failflag" ]
+    ok=1
+    [ ! -f "$failflag" ] || ok=0
+    rm -f "$failflag"
+    [ "$ok" -eq 1 ]
 }
 
 occupy_pool() {
@@ -204,7 +214,7 @@ status_pool() {
     pool=$1
     tsv="$STATE_DIR/$pool/$pool.tsv"
     [ -f "$tsv" ] || { echo "Pool '$pool' has not been seeded (no $tsv)" >&2; exit 1; }
-    printf 'slot\tuuid\tstatus\tissues_at\n'
+    printf 'slot\tuuid\tstatus\tissued_at\n'
     cat "$tsv"
     awk -F'\t' '
         { if ($3 == "free") free++; else occupied++ }

@@ -45,5 +45,8 @@ assert_eq "non-numeric slot is rejected" "invalid slot: abc" "$err"
 err=$(run_err expand_slot_spec 5-abc)
 assert_eq "non-numeric range bound is rejected" "invalid slot range: 5-abc" "$err"
 
+err=$(run_err expand_slot_spec 9-5)
+assert_eq "reversed range is rejected" "invalid slot range: 9-5" "$err"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -10,6 +10,7 @@ export MSYS2_ARG_CONV_EXCL='/CN='
 : "${MIRROR_PROVISION_SCRIPT_DIR:=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)}"
 TEMPLATE_DIR="$MIRROR_PROVISION_SCRIPT_DIR/templates"
 PROJECT_DIR=$(dirname "$MIRROR_PROVISION_SCRIPT_DIR")
+TLS_SERVER_NAME="pt-nad-rt.edtechlab.local"
 
 usage() {
     cat <<'EOF'
@@ -181,8 +182,8 @@ ensure_server_cert() {
     ( umask 077
       openssl genrsa -out "$STATE_DIR/server.key" 2048 2>/dev/null
       openssl req -new -key "$STATE_DIR/server.key" -out "$STATE_DIR/server.csr" \
-          -subj "/CN=nad-mirror.internal" \
-          -addext "subjectAltName=DNS:nad-mirror.internal,IP:$NAD_HOST"
+          -subj "/CN=$TLS_SERVER_NAME" \
+          -addext "subjectAltName=DNS:$TLS_SERVER_NAME,IP:$NAD_HOST"
       openssl x509 -req -in "$STATE_DIR/server.csr" -CA "$STATE_DIR/ca.crt" -CAkey "$STATE_DIR/ca.key" \
           -CAcreateserial -out "$STATE_DIR/server.crt" -days 365 -sha256 -copy_extensions copy )
     rm -f "$STATE_DIR/server.csr"

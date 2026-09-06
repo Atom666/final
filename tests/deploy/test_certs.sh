@@ -50,7 +50,7 @@ ca_subject=$(openssl x509 -in "$STATE_DIR/ca.crt" -noout -subject)
 assert_eq "CA certificate has the expected CN" "subject=CN=mirror-provision-ca" "$ca_subject"
 
 server_subject=$(openssl x509 -in "$STATE_DIR/server.crt" -noout -subject)
-assert_eq "server certificate has the expected CN" "subject=CN=nad-mirror.internal" "$server_subject"
+assert_eq "server certificate has the expected CN" "subject=CN=pt-nad-rt.edtechlab.local" "$server_subject"
 
 before=$(cat "$STATE_DIR/server.crt")
 run "$STATE_DIR" "192.168.1.78" ensure_server_cert

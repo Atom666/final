@@ -1,0 +1,17 @@
+[Unit]
+Description=Mirror Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+StateDirectory=mirror-agent
+ExecStart=/usr/local/sbin/mirror-agent /etc/mirror-agent/agent.conf
+Restart=always
+RestartSec=2
+CapabilityBoundingSet=CAP_NET_RAW
+AmbientCapabilities=CAP_NET_RAW
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

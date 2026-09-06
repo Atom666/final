@@ -1,0 +1,44 @@
+# Build artifacts
+/build/
+/build-cmake/
+/build-windows/
+/out/
+*.o
+*.a
+*.so
+
+# Runtime output and packet captures
+*.log
+*.pid
+*.pcap
+*.pcapng
+*.pcap.gz
+core
+core.*
+
+# Local TLS material and environment secrets
+*.key
+*.pem
+*.p12
+*.pfx
+.env
+.env.*
+
+# Coverage and sanitizer output
+*.gcda
+*.gcno
+*.gcov
+coverage/
+
+# Editor and OS metadata
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Local Codex workspace metadata
+/.agents/
+/.codex/
+/.claude/

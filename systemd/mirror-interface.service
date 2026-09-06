@@ -1,0 +1,14 @@
+[Unit]
+Description=Mirror receiver local veth pair
+Before=mirror-receiver.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/libexec/mirror-interface-setup.sh
+CapabilityBoundingSet=CAP_NET_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=Mirror Receiver
+After=network-online.target mirror-interface.service
+Wants=network-online.target mirror-interface.service
+Requires=mirror-interface.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/mirror-receiver /etc/mirror-receiver/receiver.conf
+Restart=always
+RestartSec=2
+CapabilityBoundingSet=CAP_NET_RAW
+AmbientCapabilities=CAP_NET_RAW
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -172,6 +172,74 @@ expand_slot_spec() {
     done
 }
 
+write_pool_bootstrap_script() {
+    pool=$1
+    idx=$2
+    uuid=$3
+    crt=$4
+    key=$5
+    label=$(pool_label "$pool")
+    out="$STATE_DIR/$pool/${label}${idx}_${uuid}.sh"
+    render_template "$TEMPLATE_DIR/agent-bootstrap.sh.tmpl" \
+        "AGENT_UUID=$uuid" \
+        "RECEIVER_HOST=$NAD_HOST" \
+        "RECEIVER_PORT=9443" \
+        "TLS_SERVER_NAME=$TLS_SERVER_NAME" \
+        "CA_CRT_B64=$(base64_flatten "$STATE_DIR/ca.crt")" \
+        "CLIENT_CRT_B64=$(base64_flatten "$crt")" \
+        "CLIENT_KEY_B64=$(base64_flatten "$key")" \
+        > "$out"
+    chmod 700 "$out"
+}
+
+issue_pool_cert() {
+    pool=$1
+    idx=$2
+    label=$(pool_label "$pool")
+    uuid=$(generate_uuid)
+    key="$STATE_DIR/$pool/${label}${idx}_${uuid}.key"
+    crt="$STATE_DIR/$pool/${label}${idx}_${uuid}.crt"
+    csr="$STATE_DIR/$pool/${label}${idx}_${uuid}.csr"
+    ( umask 077
+      openssl genrsa -out "$key" 2048 2>/dev/null
+      openssl req -new -key "$key" -out "$csr" -subj "/CN=$uuid" )
+    openssl x509 -req -in "$csr" -CA "$STATE_DIR/ca.crt" -CAkey "$STATE_DIR/ca.key" \
+        -CAcreateserial -out "$crt" -days 365 -sha256
+    rm -f "$csr"
+    write_pool_bootstrap_script "$pool" "$idx" "$uuid" "$crt" "$key"
+    printf '%s\t%s\tfree\t%s\n' "$idx" "$uuid" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        >> "$STATE_DIR/$pool/$pool.tsv"
+}
+
+seed_pool() {
+    pool=$1
+    count=$2
+    [ -f "$STATE_DIR/ca.key" ] && [ -f "$STATE_DIR/ca.crt" ] || {
+        echo "CA not found in $STATE_DIR; run '$0 init' first" >&2
+        exit 1
+    }
+    pool_dir="$STATE_DIR/$pool"
+    tsv="$pool_dir/$pool.tsv"
+    mkdir -p "$pool_dir"
+    chmod 700 "$pool_dir"
+    if [ -f "$tsv" ]; then
+        existing=$(wc -l < "$tsv" | tr -d ' ')
+        if [ "$existing" -eq "$count" ]; then
+            printf 'Pool %s already seeded with %d slot(s).\n' "$pool" "$existing"
+            return 0
+        fi
+        echo "Pool '$pool' already has $existing slot(s); growing/shrinking a seeded pool is not supported." >&2
+        echo "Use a fresh --state-dir if you need a different size." >&2
+        exit 1
+    fi
+    idx=1
+    while [ "$idx" -le "$count" ]; do
+        issue_pool_cert "$pool" "$idx"
+        idx=$((idx + 1))
+    done
+    printf 'Seeded pool %s with %d slot(s) in %s\n' "$pool" "$count" "$pool_dir"
+}
+
 check_nad_host_stable() {
     host_file="$STATE_DIR/nad-host"
     if [ -f "$host_file" ]; then

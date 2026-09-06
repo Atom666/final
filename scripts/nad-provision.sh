@@ -289,6 +289,18 @@ release_pool() {
     mark_slots "$1" "$2" free occupied
 }
 
+status_pool() {
+    pool=$1
+    tsv="$STATE_DIR/$pool/$pool.tsv"
+    [ -f "$tsv" ] || { echo "Pool '$pool' has not been seeded (no $tsv)" >&2; exit 1; }
+    printf 'slot\tuuid\tstatus\tissues_at\n'
+    cat "$tsv"
+    awk -F'\t' '
+        { if ($3 == "free") free++; else occupied++ }
+        END { printf "\nfree: %d, occupied: %d\n", free + 0, occupied + 0 }
+    ' "$tsv"
+}
+
 check_nad_host_stable() {
     host_file="$STATE_DIR/nad-host"
     if [ -f "$host_file" ]; then

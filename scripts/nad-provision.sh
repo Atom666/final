@@ -240,6 +240,55 @@ seed_pool() {
     printf 'Seeded pool %s with %d slot(s) in %s\n' "$pool" "$count" "$pool_dir"
 }
 
+mark_slots() {
+    pool=$1
+    spec=$2
+    target_status=$3
+    require_status=$4
+    tsv="$STATE_DIR/$pool/$pool.tsv"
+    [ -f "$tsv" ] || { echo "Pool '$pool' has not been seeded (no $tsv)" >&2; exit 1; }
+    slots=$(expand_slot_spec "$spec" | tr '\n' ',')
+    tmp="$tsv.tmp.$$"
+    failflag="$tmp.fail"
+    rm -f "$failflag"
+    awk -F'\t' -v OFS='\t' \
+        -v slots="$slots" -v target="$target_status" -v require="$require_status" -v failflag="$failflag" -v tmpfile="$tmp" '
+        BEGIN {
+            n = split(slots, arr, ",")
+            for (i = 1; i <= n; i++) if (arr[i] != "") want[arr[i]] = 1
+        }
+        {
+            if ($1 in want) {
+                seen[$1] = 1
+                if ($3 == require) {
+                    print "OK   - slot " $1 " -> " target
+                    $3 = target
+                } else {
+                    print "FAIL - slot " $1 " is already " $3 > "/dev/stderr"
+                    system("touch " failflag)
+                }
+            }
+            print > tmpfile
+        }
+        END {
+            for (s in want) if (!(s in seen)) {
+                print "FAIL - slot " s " does not exist in pool" > "/dev/stderr"
+                system("touch " failflag)
+            }
+        }
+    ' "$tsv"
+    mv "$tmp" "$tsv"
+    [ ! -f "$failflag" ]
+}
+
+occupy_pool() {
+    mark_slots "$1" "$2" occupied free
+}
+
+release_pool() {
+    mark_slots "$1" "$2" free occupied
+}
+
 check_nad_host_stable() {
     host_file="$STATE_DIR/nad-host"
     if [ -f "$host_file" ]; then

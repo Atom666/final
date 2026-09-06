@@ -301,6 +301,32 @@ status_pool() {
     ' "$tsv"
 }
 
+export_pool() {
+    pool=$1
+    spec=$2
+    out=$3
+    pool_dir="$STATE_DIR/$pool"
+    tsv="$pool_dir/$pool.tsv"
+    [ -f "$tsv" ] || { echo "Pool '$pool' has not been seeded (no $tsv)" >&2; exit 1; }
+    label=$(pool_label "$pool")
+    if [ -n "$spec" ]; then
+        slots=$(expand_slot_spec "$spec")
+    else
+        slots=$(cut -f1 "$tsv")
+    fi
+    names=""
+    for idx in $slots; do
+        uuid=$(awk -F'\t' -v idx="$idx" '$1 == idx { print $2 }' "$tsv")
+        [ -n "$uuid" ] || { echo "slot $idx does not exist in pool '$pool'" >&2; exit 1; }
+        name="${label}${idx}_${uuid}.sh"
+        [ -f "$pool_dir/$name" ] || { echo "bootstrap script missing for slot $idx: $pool_dir/$name" >&2; exit 1; }
+        names="$names $name"
+    done
+    # shellcheck disable=SC2086 -- $names is a list of known-safe generated filenames
+    tar -czf "$out" -C "$pool_dir" $names
+    printf 'Exported %d script(s) to %s\n' "$(printf '%s\n' $slots | wc -l | tr -d ' ')" "$out"
+}
+
 check_nad_host_stable() {
     host_file="$STATE_DIR/nad-host"
     if [ -f "$host_file" ]; then

@@ -53,5 +53,26 @@ assert_eq "export never touches the registry" "$before" "$after"
 err=$(run export_pool students 99 "$TMP/bad.tar.gz" 2>&1 1>/dev/null)
 assert_eq "exporting a nonexistent slot is an error" "1" "$(printf '%s\n' "$err" | grep -c 'slot 99')"
 
+mkdir -p "$STATE_DIR/labs"
+: > "$STATE_DIR/ca.crt"
+labs_tsv="$STATE_DIR/labs/labs.tsv"
+printf '1\tuuid-a\tfree\t2026-01-01T00:00:00Z\n' > "$labs_tsv"
+printf '2\tuuid-b\tfree\t2026-01-01T00:00:00Z\n' >> "$labs_tsv"
+for n in 1 2; do
+    uuid=$(awk -F'\t' -v n="$n" '$1 == n { print $2 }' "$labs_tsv")
+    echo "cert $n" > "$STATE_DIR/labs/machine${n}_${uuid}.crt"
+    echo "key $n" > "$STATE_DIR/labs/machine${n}_${uuid}.key"
+    echo "$uuid" > "$STATE_DIR/labs/machine${n}_${uuid}.uuid"
+done
+
+run export_pool labs 1 "$TMP/labs-one.tar.gz"
+listing=$(tar -tzf "$TMP/labs-one.tar.gz" | sort)
+assert_eq "labs export bundles crt+key+uuid for the slot, plus the shared CA" "4" "$(printf '%s\n' "$listing" | wc -l | tr -d ' ')"
+assert_eq "labs export includes the shared ca.crt" "1" "$(printf '%s\n' "$listing" | grep -c '^ca.crt$')"
+assert_eq "labs export includes the slot's crt" "1" "$(printf '%s\n' "$listing" | grep -c '^machine1_.*\.crt$')"
+assert_eq "labs export includes the slot's key" "1" "$(printf '%s\n' "$listing" | grep -c '^machine1_.*\.key$')"
+assert_eq "labs export includes the slot's uuid file" "1" "$(printf '%s\n' "$listing" | grep -c '^machine1_.*\.uuid$')"
+assert_eq "labs export does not include an unrequested slot's files" "0" "$(printf '%s\n' "$listing" | grep -c 'machine2_')"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

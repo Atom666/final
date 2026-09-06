@@ -345,8 +345,9 @@ golden-образа: клонированная VM на каждом старт�
 включает `mirror-interface.service`/`mirror-receiver.service`. Повторный
 запуск с тем же `--nad-host` — no-op.
 
-Дальше один раз на весь пул нужных сертификатов (сейчас есть пул
-`students`; `labs` для Windows-машин лабораторий появится отдельно):
+Дальше один раз на весь пул нужных сертификатов. Есть два пула: `students`
+(Linux, LXD-контейнеры студентов) и `labs` (Windows, машины лабораторий) —
+оба через один и тот же набор команд, ниже сначала про `students`:
 
 ```sh
 ./scripts/nad-provision.sh seed --pool students --count 100
@@ -384,6 +385,25 @@ sudo ./student7_<uuid>.sh
 ```sh
 ./scripts/nad-provision.sh export --pool students --out students.tar.gz
 ```
+
+Пул `labs` устроен так же (`seed --pool labs --count 100`,
+`occupy`/`release`/`status --pool labs`), но экспорт отдаёт другой набор
+файлов — для Windows не нужен bootstrap-скрипт, эту роль уже играет
+`scripts/start-agent.ps1` (см. "Автоматизированная установка и golden-образ"
+выше). Вместо одного `.sh` архив содержит на слот `machine<N>_<uuid>.crt`,
+`.key`, `.uuid` (текстовый файл с UUID — агент читает его как
+`uuid_file`, когда `agent_uuid = auto`; значение обязано совпадать с CN
+сертификата) плюс один общий `ca.crt` на весь архив:
+
+```sh
+./scripts/nad-provision.sh seed   --pool labs --count 100
+./scripts/nad-provision.sh export --pool labs --slots 7 --out machine7.tar.gz
+```
+
+Из архива на целевую машину раскладываются `client.crt`/`client.key`/
+`mirror-agent.uuid`/`ca.crt` в `CertsPath` (по умолчанию `C:\deps\certs`) —
+куда именно и как их туда доставить, решает внешний процесс разворачивания,
+не этот скрипт.
 
 Ниже описан тот же процесс вручную — полезно для отладки или если нужно
 изменить шаг вручную.

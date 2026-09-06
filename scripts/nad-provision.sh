@@ -121,7 +121,19 @@ issue_pool_cert() {
     openssl x509 -req -in "$csr" -CA "$STATE_DIR/ca.crt" -CAkey "$STATE_DIR/ca.key" \
         -CAcreateserial -out "$crt" -days 365 -sha256
     rm -f "$csr"
-    write_pool_bootstrap_script "$pool" "$idx" "$uuid" "$crt" "$key"
+    case "$pool" in
+        students)
+            write_pool_bootstrap_script "$pool" "$idx" "$uuid" "$crt" "$key"
+            ;;
+        labs)
+            # No bootstrap script: start-agent.ps1 already refreshes certs and
+            # capture_iface on every boot. The agent reads its UUID from this
+            # file (agent_uuid = auto, uuid_file = mirror-agent.uuid) when it
+            # doesn't have one of its own yet; it must match the cert's CN or
+            # the receiver's mTLS check rejects the connection.
+            printf '%s\n' "$uuid" > "$STATE_DIR/$pool/${label}${idx}_${uuid}.uuid"
+            ;;
+    esac
     printf '%s\t%s\tfree\t%s\n' "$idx" "$uuid" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         >> "$STATE_DIR/$pool/$pool.tsv"
 }
@@ -239,13 +251,30 @@ export_pool() {
     for idx in $slots; do
         uuid=$(awk -F'\t' -v idx="$idx" '$1 == idx { print $2 }' "$tsv")
         [ -n "$uuid" ] || { echo "slot $idx does not exist in pool '$pool'" >&2; exit 1; }
-        name="${label}${idx}_${uuid}.sh"
-        [ -f "$pool_dir/$name" ] || { echo "bootstrap script missing for slot $idx: $pool_dir/$name" >&2; exit 1; }
-        names="$names $name"
+        case "$pool" in
+            students)
+                name="${label}${idx}_${uuid}.sh"
+                [ -f "$pool_dir/$name" ] || { echo "bootstrap script missing for slot $idx: $pool_dir/$name" >&2; exit 1; }
+                names="$names $name"
+                ;;
+            labs)
+                for ext in crt key uuid; do
+                    name="${label}${idx}_${uuid}.$ext"
+                    [ -f "$pool_dir/$name" ] || { echo "$ext file missing for slot $idx: $pool_dir/$name" >&2; exit 1; }
+                    names="$names $name"
+                done
+                ;;
+        esac
     done
-    # shellcheck disable=SC2086 -- $names is a list of known-safe generated filenames
-    tar -czf "$out" -C "$pool_dir" $names
-    printf 'Exported %d script(s) to %s\n' "$(printf '%s\n' $slots | wc -l | tr -d ' ')" "$out"
+    if [ "$pool" = labs ] && [ -n "$names" ]; then
+        [ -f "$STATE_DIR/ca.crt" ] || { echo "ca.crt not found in $STATE_DIR; run '$0 init' first" >&2; exit 1; }
+        # shellcheck disable=SC2086 -- $names is a list of known-safe generated filenames
+        tar -czf "$out" -C "$pool_dir" $names -C "$STATE_DIR" ca.crt
+    else
+        # shellcheck disable=SC2086 -- $names is a list of known-safe generated filenames
+        tar -czf "$out" -C "$pool_dir" $names
+    fi
+    printf 'Exported %d slot(s) to %s\n' "$(printf '%s\n' $slots | wc -l | tr -d ' ')" "$out"
 }
 
 check_nad_host_stable() {

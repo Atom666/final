@@ -1,0 +1,130 @@
+#!/bin/sh
+set -eu
+
+AGENT_UUID='@@AGENT_UUID@@'
+RECEIVER_HOST='@@RECEIVER_HOST@@'
+RECEIVER_PORT='@@RECEIVER_PORT@@'
+TLS_SERVER_NAME='@@TLS_SERVER_NAME@@'
+CA_CRT_B64='@@CA_CRT_B64@@'
+CLIENT_CRT_B64='@@CLIENT_CRT_B64@@'
+CLIENT_KEY_B64='@@CLIENT_KEY_B64@@'
+
+IFACE_OVERRIDE=
+
+parse_bootstrap_args() {
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --iface)
+                [ "$#" -ge 2 ] || { echo "--iface requires a value" >&2; exit 2; }
+                IFACE_OVERRIDE=$2
+                shift 2
+                ;;
+            -h|--help)
+                echo "Usage: $0 [--iface IFACE]"
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $1" >&2
+                exit 2
+                ;;
+        esac
+    done
+}
+
+capture_iface_from_route_output() {
+    printf '%s\n' "$1" | awk '/^default/ { for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit } }'
+}
+
+detect_capture_iface() {
+    capture_iface_from_route_output "$(ip route show default 2>/dev/null)"
+}
+
+main() {
+    parse_bootstrap_args "$@"
+
+    [ "$(id -u)" -eq 0 ] || { echo "must run as root" >&2; exit 1; }
+
+    if [ ! -x /usr/local/sbin/mirror-agent ]; then
+        echo "mirror-agent binary not found at /usr/local/sbin/mirror-agent" >&2
+        echo "Build and install it first: ./scripts/build.sh --clean --install" >&2
+        exit 1
+    fi
+    if [ ! -f /etc/systemd/system/mirror-agent.service ]; then
+        echo "mirror-agent.service not found; run ./scripts/build.sh --clean --install first" >&2
+        exit 1
+    fi
+
+    if [ -n "$IFACE_OVERRIDE" ]; then
+        iface=$IFACE_OVERRIDE
+    else
+        iface=$(detect_capture_iface)
+        if [ -z "$iface" ]; then
+            echo "Could not auto-detect capture interface; pass --iface IFACE" >&2
+            exit 1
+        fi
+    fi
+
+    install -d -m 0755 /etc/mirror-agent
+    printf '%s' "$CA_CRT_B64" | openssl base64 -A -d > /etc/mirror-agent/ca.crt
+    printf '%s' "$CLIENT_CRT_B64" | openssl base64 -A -d > /etc/mirror-agent/client.crt
+    ( umask 077; printf '%s' "$CLIENT_KEY_B64" | openssl base64 -A -d > /etc/mirror-agent/client.key )
+    chmod 0644 /etc/mirror-agent/ca.crt /etc/mirror-agent/client.crt
+    chmod 0600 /etc/mirror-agent/client.key
+
+    cat > /etc/mirror-agent/agent.conf <<EOF
+[agent]
+agent_uuid = $AGENT_UUID
+uuid_file = /var/lib/mirror-agent/agent.uuid
+capture_iface = $iface
+interface_id = 1
+
+receiver_host = $RECEIVER_HOST
+receiver_port = $RECEIVER_PORT
+
+ca_file = /etc/mirror-agent/ca.crt
+client_cert_file = /etc/mirror-agent/client.crt
+client_key_file = /etc/mirror-agent/client.key
+tls_server_name = $TLS_SERVER_NAME
+tls_verify_peer = true
+insecure_tls = false
+
+ring_blocks = 64
+block_size = 1048576
+frame_size = 131072
+block_timeout_ms = 64
+max_capture_frame_size = 65575
+
+queue_max_packets = 65536
+queue_max_bytes = 268435456
+batch_max_records = 256
+batch_max_bytes = 262144
+batch_linger_us = 200
+transport_write_timeout_sec = 10
+
+offload_policy = observe
+segmentation_mode = receiver
+
+reconnect_initial_sec = 1
+reconnect_max_sec = 30
+heartbeat_interval_sec = 10
+stats_interval_sec = 10
+log_interval_sec = 10
+EOF
+
+    if command -v nc >/dev/null 2>&1; then
+        if ! nc -vz -w 3 "$RECEIVER_HOST" "$RECEIVER_PORT" >/dev/null 2>&1; then
+            echo "WARNING: could not reach $RECEIVER_HOST:$RECEIVER_PORT right now (agent will retry on its own)" >&2
+        fi
+    fi
+
+    systemctl daemon-reload
+    systemctl enable --now mirror-agent.service
+
+    printf '\nmirror-agent started with UUID %s on interface %s.\n' "$AGENT_UUID" "$iface"
+    printf 'Check status: sudo journalctl -u mirror-agent.service -n 50 --no-pager\n'
+    printf 'This script contains this agent'\''s private key in cleartext — delete it after use: rm -f %s\n' "$0"
+}
+
+if [ "${MIRROR_BOOTSTRAP_SOURCE:-0}" != "1" ]; then
+    main "$@"
+fi

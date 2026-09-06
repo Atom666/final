@@ -135,6 +135,43 @@ base64_flatten() {
     openssl base64 -A -in "$1"
 }
 
+pool_label() {
+    case "$1" in
+        students) echo student ;;
+        labs) echo machine ;;
+        *) echo "unknown pool: $1" >&2; exit 1 ;;
+    esac
+}
+
+expand_slot_spec() {
+    spec=$1
+    IFS=','
+    for part in $spec; do
+        case "$part" in
+            *-*)
+                lo=${part%-*}
+                hi=${part#*-}
+                is_positive_int "$lo" && is_positive_int "$hi" || {
+                    echo "invalid slot range: $part" >&2
+                    exit 2
+                }
+                i=$lo
+                while [ "$i" -le "$hi" ]; do
+                    echo "$i"
+                    i=$((i + 1))
+                done
+                ;;
+            *)
+                is_positive_int "$part" || {
+                    echo "invalid slot: $part" >&2
+                    exit 2
+                }
+                echo "$part"
+                ;;
+        esac
+    done
+}
+
 check_nad_host_stable() {
     host_file="$STATE_DIR/nad-host"
     if [ -f "$host_file" ]; then

@@ -905,11 +905,13 @@ In `scripts/nad-provision.sh`, delete these functions entirely (they are fully s
 - `main()` (will be replaced in Step 5)
 - the trailing guard `if [ "${MIRROR_PROVISION_SOURCE:-0}" != "1" ]; then main "$@"; fi` (will be re-added in Step 5)
 
-Also delete the now-unused globals declared near the top of the file: `MODE=`, `MODE_VALUE=`, `AGENTS_TSV=`, `NEW_AGENTS=` (leave `NAD_HOST=` and `STATE_DIR="$HOME/mirror-certs"` — those are still used as the default template for each `cmd_*`'s own local parsing).
+Also delete the now-unused globals declared near the top of the file: `MODE=`, `MODE_VALUE=`, `AGENTS_TSV=`, `NEW_AGENTS=`, `NAD_HOST=`, and `STATE_DIR="$HOME/mirror-certs"`. Every `cmd_*` added in Step 5 sets its own `STATE_DIR`/`NAD_HOST` at the top of its own body before anything reads them, so the old top-level declarations are dead code once Step 5 lands — delete them in this step rather than leaving them unused.
+
+Note on `usage()`'s original location: in the current file, `usage()` sits near the *top* (right after the `PROJECT_DIR=...` line, before the old `parse_args()`), while `main()` sits at the very *end*, immediately before the run guard. Delete `usage()` from its current top position along with the other functions listed above — its replacement in Step 5 is added only at the end of the file, alongside the new `main()`. Shell doesn't care where a function is defined relative to where it's called, as long as it's defined before the script actually invokes it at the bottom, so this relocation is safe.
 
 - [ ] **Step 5: Add `usage`, `cmd_init`, `cmd_seed`, `cmd_occupy`, `cmd_release`, `cmd_status`, `cmd_export`, and the new `main`**
 
-Add at the same place the old `usage()`/`main()` lived (end of file, before the run guard):
+Add at the end of the file, before the run guard (this is where `main()` lived; `usage()`'s new copy goes here too, not back at the top — see the note in Step 4):
 
 ```sh
 usage() {
